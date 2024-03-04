@@ -1,7 +1,9 @@
+mod position_list;
 mod web_utils;
 
 use clap::Parser;
 use log::{error, info};
+use position_list::PositionList;
 use reqwest::Client;
 use std::error;
 use web_utils::construct_headers;
@@ -76,6 +78,36 @@ async fn limit_buy_futures_position(
         error!("Error in sending the futures order {}", symbol);
     }
     Ok(())
+}
+
+async fn get_leverage(
+    client: Client,
+    symbol: &str,
+    recv_window: &str,
+) -> Result<f32, Box<dyn error::Error>> {
+    let params = format!("category=linear&symbol={}", symbol);
+    let url = format!("https://api-testnet.bybit.com/v5/position/list?{}", params);
+    let res = client
+        .get(&url)
+        .headers(construct_headers(&params, recv_window))
+        .send()
+        .await?;
+    let body = res.text().await?;
+
+    let leverage_json: PositionList = serde_json::from_str(&body).unwrap_or(PositionList {
+        result: position_list::Result {
+            list: vec![position_list::LeverageList {
+                leverage: "0.0".to_string(),
+            }],
+        },
+    });
+
+    let value: f32 = leverage_json.result.list[0]
+        .leverage
+        .parse()
+        .expect("Issue parsing the leverage to f32");
+
+    Ok(value)
 }
 
 #[tokio::main]
